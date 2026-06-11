@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>文化祭 経費帳</title>
+<title>学苑祭 経費</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -282,7 +282,7 @@ function EventCard({ev, onOpen}) {
 }
 
 // ==================== NEW EVENT ====================
-const DEFAULT_CATS = ["食費","交通費","備品","印刷","その他"];
+const DEFAULT_CATS = ["装飾","備品","印刷","その他"];
 function NewEventScreen({onBack,onCreate}) {
   const [name,setName]=useState("");
   const [budget,setBudget]=useState("");
@@ -535,7 +535,7 @@ function MembersTab({members,isAdmin,onAdd,onDelete,onImportCSV}) {
       <div style={S.secTitle}>名簿を追加</div>
       <div style={{background:"#f7f8fa",borderRadius:12,padding:14,marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>📂 CSVから一括登録</div>
-        <div style={{fontSize:11,color:"#888",marginBottom:8}}>形式：学籍番号,氏名（1行1人）<br/>例： 1001,山田太郎</div>
+        <div style={{fontSize:11,color:"#888",marginBottom:8}}>形式：学籍番号,氏名（1行1人）<br/>例： 1001,水戸一郎</div>
         <input type="file" accept=".csv,text/csv" ref={fileRef} style={{display:"none"}} onChange={e=>e.target.files[0]&&handleCSV(e.target.files[0])}/>
         <button style={{...S.btnS,width:"100%"}} onClick={()=>fileRef.current.click()} disabled={importing}>{importing?"インポート中…":"CSVをアップロード"}</button>
       </div>
