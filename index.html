@@ -122,7 +122,7 @@ function App() {
   const pollRef = useRef(null);
 
   useEffect(() => {
-    if (params.eventId && params.mode === "member") {
+    if (params.eventId) {
       loadSingleEvent(params.eventId);
     } else {
       loadEvents();
@@ -133,10 +133,18 @@ function App() {
     setLoading(true);
     try {
       const d = await sb.get("events", "?id=eq." + eid);
-      const ev = Array.isArray(d) && d[0];
-      if (ev) { setEvents([ev]); openEvent(ev); }
-      else { setLoading(false); }
-    } catch { setLoading(false); }
+      if (Array.isArray(d) && d.length > 0) {
+        const ev = d[0];
+        setEvents([ev]);
+        setActiveEvent(ev);
+        setView("event");
+        await loadExpenses(ev.id);
+        await loadMembers(ev.id);
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = setInterval(() => loadExpenses(ev.id), 8000);
+      }
+    } catch(e) { console.error(e); }
+    setLoading(false);
   }
 
   async function loadEvents() {
@@ -193,7 +201,9 @@ function App() {
     return batch.length;
   }
 
-  const isAdmin = activeEvent && params.mode==="admin";
+  // URLハッシュからリアルタイムでmodeを取得
+  const currentMode = new URLSearchParams(window.location.hash.replace("#","")).get("mode") || "view";
+  const isAdmin = activeEvent && currentMode === "admin";
   // 現在のユーザーの学籍番号をセッションストレージで管理
   const currentStudentId = sessionStorage.getItem(`sid_${activeEvent?.id}`) || "";
 
@@ -206,7 +216,7 @@ function App() {
       <p style={{color:"#888",fontSize:14,textAlign:"center"}}>イベントが見つかりませんでした。<br/>正しいリンクを使ってアクセスしてください。</p>
     </div>
   );
-  if (view==="home") return <HomeScreen events={events} onCreate={()=>setView("new-event")} onOpen={ev=>{window.location.hash=`event=${ev.id}&mode=admin`;openEvent(ev);}}/>;
+  if (view==="home") return <HomeScreen events={events} onCreate={()=>setView("new-event")} onOpen={ev=>{window.location.hash=`event=${ev.id}&mode=admin`;openEvent(ev);}} isAdmin={params.mode!=="member"}/>;
   if (view==="new-event") return <NewEventScreen onBack={()=>setView("home")} onCreate={createEvent}/>;
   if (view==="event"&&activeEvent) return <EventScreen
     event={activeEvent} expenses={expenses} members={members} isAdmin={isAdmin}
