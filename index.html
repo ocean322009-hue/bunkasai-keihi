@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>学苑祭 経費</title>
+<title>文化祭 経費帳</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -40,10 +40,10 @@ const sb = {
   async patch(table, id, body) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
       method: "PATCH",
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    return res.json();
+    return res.ok;
   },
   async del(table, id) {
     await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
@@ -188,7 +188,13 @@ function App() {
     await loadExpenses(activeEvent.id);
   }
   async function updateExpense(id, expense) {
-    await sb.patch("expenses", id, { store:expense.store||"", purchase_datetime:expense.purchase_datetime, items:expense.items||[], amount:Number(expense.amount), category:expense.category||"その他" });
+    await sb.patch("expenses", id, {
+      store: expense.store || "",
+      purchase_datetime: expense.purchase_datetime || "",
+      items: expense.items || [],
+      amount: Number(expense.amount),
+      category: expense.category || "その他"
+    });
     await loadExpenses(activeEvent.id);
   }
   async function deleteExpense(expId) { await sb.del("expenses",expId); setExpenses(prev=>prev.filter(e=>e.id!==expId)); }
@@ -205,7 +211,7 @@ function App() {
   const currentMode = new URLSearchParams(window.location.hash.replace("#","")).get("mode") || "view";
   const isAdmin = activeEvent && currentMode === "admin";
   // 現在のユーザーの学籍番号をセッションストレージで管理
-  const currentStudentId = sessionStorage.getItem(`sid_${activeEvent?.id}`) || "";
+  const currentStudentId = localStorage.getItem(`sid_${activeEvent?.id}`) || "";
 
   if (loading) return <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={S.spin}/><p style={{color:"#888",fontSize:14}}>読み込み中…</p></div>;
 
@@ -221,7 +227,7 @@ function App() {
   if (view==="event"&&activeEvent) return <EventScreen
     event={activeEvent} expenses={expenses} members={members} isAdmin={isAdmin}
     syncing={syncing} currentStudentId={currentStudentId}
-    onAddExpense={async(exp)=>{ sessionStorage.setItem(`sid_${activeEvent.id}`, exp.student_id); await addExpense(exp); }}
+    onAddExpense={async(exp)=>{ localStorage.setItem(`sid_${activeEvent.id}`, exp.student_id); await addExpense(exp); }}
     onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense}
     onUpdateBudget={updateEventBudget}
     onAddMember={addMember} onDeleteMember={deleteMember} onImportCSV={importMembersCSV}
@@ -282,7 +288,7 @@ function EventCard({ev, onOpen}) {
 }
 
 // ==================== NEW EVENT ====================
-const DEFAULT_CATS = ["装飾","備品","印刷","その他"];
+const DEFAULT_CATS = ["食費","交通費","備品","印刷","その他"];
 function NewEventScreen({onBack,onCreate}) {
   const [name,setName]=useState("");
   const [budget,setBudget]=useState("");
@@ -391,7 +397,7 @@ function EventScreen({event,expenses,members,isAdmin,syncing,currentStudentId,on
     {modal==="addExpense"&&<ExpenseFormModal categories={cats.map(c=>c.name)} members={members} mode="add" onClose={()=>setModal(null)} onSave={async exp=>{await onAddExpense(exp);setModal(null);}}/>}
     {modal==="editExpense"&&editTarget&&<ExpenseFormModal categories={cats.map(c=>c.name)} members={members} mode="edit" initial={editTarget} onClose={()=>{setModal(null);setEditTarget(null);}} onSave={async exp=>{await onUpdateExpense(editTarget.id,exp);setModal(null);setEditTarget(null);}}/>}
     {modal==="setBudget"&&isAdmin&&<SetBudgetModal event={event} onClose={()=>setModal(null)} onSave={async(t,c)=>{await onUpdateBudget(t,c);setModal(null);}}/>}
-    {modal==="share"&&<ShareModal event={event} onClose={()=>setModal(null)}/>}
+    {modal==="share"&&<ShareModal event={event} isAdmin={isAdmin} onClose={()=>setModal(null)}/>}
   </div>;
 }
 
@@ -535,7 +541,7 @@ function MembersTab({members,isAdmin,onAdd,onDelete,onImportCSV}) {
       <div style={S.secTitle}>名簿を追加</div>
       <div style={{background:"#f7f8fa",borderRadius:12,padding:14,marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>📂 CSVから一括登録</div>
-        <div style={{fontSize:11,color:"#888",marginBottom:8}}>形式：学籍番号,氏名（1行1人）<br/>例： 1001,水戸一郎</div>
+        <div style={{fontSize:11,color:"#888",marginBottom:8}}>形式：学籍番号,氏名（1行1人）<br/>例： 1001,山田太郎</div>
         <input type="file" accept=".csv,text/csv" ref={fileRef} style={{display:"none"}} onChange={e=>e.target.files[0]&&handleCSV(e.target.files[0])}/>
         <button style={{...S.btnS,width:"100%"}} onClick={()=>fileRef.current.click()} disabled={importing}>{importing?"インポート中…":"CSVをアップロード"}</button>
       </div>
@@ -593,11 +599,21 @@ function SetBudgetModal({event,onClose,onSave}) {
 }
 
 // ==================== SHARE MODAL ====================
-function ShareModal({event,onClose}) {
+function ShareModal({event,isAdmin,onClose}) {
   const adminURL=buildURL(event.id,"admin");
   const memberURL=buildURL(event.id,"member");
   const [copied,setCopied]=useState(null);
-  function copy(url,type){navigator.clipboard.writeText(url).then(()=>{setCopied(type);setTimeout(()=>setCopied(null),2000);});}
+  function copy(url,type){
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(url).then(()=>{setCopied(type);setTimeout(()=>setCopied(null),2000);});
+    } else {
+      const el=document.createElement("textarea");el.value=url;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);
+      setCopied(type);setTimeout(()=>setCopied(null),2000);
+    }
+  }
+  const links = isAdmin
+    ? [{label:"👑 管理者リンク",desc:"予算設定・名簿管理・全件編集削除が可能",url:adminURL,type:"admin"},{label:"✏️ メンバーリンク",desc:"経費追加・自分の経費の編集削除が可能",url:memberURL,type:"member"}]
+    : [{label:"✏️ このイベントのリンク",desc:"このページのリンクを共有できます",url:memberURL,type:"member"}];
   return <div style={S.overlay} onClick={onClose}>
     <div style={S.modal} onClick={e=>e.stopPropagation()}>
       <div style={S.handle}/>
@@ -605,13 +621,13 @@ function ShareModal({event,onClose}) {
         <h3 style={{margin:0,fontSize:17}}>共有リンク</h3>
         <button style={S.closeBtn} onClick={onClose}>✕ 閉じる</button>
       </div>
-      {[{label:"👑 管理者リンク",desc:"予算設定・名簿管理・全件編集削除が可能",url:adminURL,type:"admin"},{label:"✏️ メンバーリンク",desc:"経費追加・自分の経費の編集削除が可能",url:memberURL,type:"member"}].map(({label,desc,url,type})=>
+      {links.map(({label,desc,url,type})=>
         <div key={type} style={{background:"#f7f8fa",borderRadius:12,padding:14,marginBottom:12}}>
           <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{label}</div>
           <div style={{fontSize:12,color:"#888",marginBottom:8}}>{desc}</div>
           <div style={{display:"flex",gap:8}}>
             <input style={{...S.input,flex:1,fontSize:11,color:"#555"}} readOnly value={url}/>
-            <button style={copied===type?S.btnOk:S.btnS} onClick={()=>copy(url,type)}>{copied===type?"✓ コピー済み":"コピー"}</button>
+            <button style={{...(copied===type?S.btnOk:S.btnS),touchAction:"manipulation"}} onPointerUp={()=>copy(url,type)}>{copied===type?"✓ コピー済み":"コピー"}</button>
           </div>
         </div>)}
       <div style={{background:"#edfbf3",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#16a085"}}>
