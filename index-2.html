@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>文化祭 経費帳</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f2f4f8; font-family: 'Hiragino Sans', 'Meiryo', sans-serif; }
+@keyframes spin { to { transform: rotate(360deg); } }
+input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const SUPABASE_URL = "https://xoxtdytgwfezhoxokjgy.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhveHRkeXRnd2ZlemhveG9ramd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwODc5MTUsImV4cCI6MjA5NjY2MzkxNX0.NTTURH72M_MD0QQdf8JhZfMeTNSERq8tBxgTjc4qha8";
+
+const sb = {
+  async get(table, query="") {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    return res.json();
+  },
+  async post(table, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify(body)
+    });
+    return res.json();
+  },
+  async patch(table, id, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify(body)
+    });
+    return res.json();
+  },
+  async del(table, id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+  }
+};
+
+function getParams() {
+  const p = new URLSearchParams(window.location.hash.replace("#",""));
+  return { eventId: p.get("event")||null, mode: p.get("mode")||"view" };
+}
+function buildURL(eventId, mode) {
+  const base = "https://ocean322009-hue.github.io/bunkasai-keihi/";
+  return `${base}#event=${eventId}&mode=${mode}`;
+}
+function today() { return new Date().toISOString().split("T")[0]; }
+function nowDatetime() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+function calcTotal(items) {
+  return items.reduce((s, it) => s + (Number(it.unit_price)||0) * (Number(it.quantity)||1), 0);
+}
+
+const S = {
+  page: { minHeight:"100vh", background:"#f2f4f8" },
+  header: { background:"#1a1a2e", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:100 },
+  logo: { color:"#fff", fontWeight:800, fontSize:16 },
+  backBtn: { background:"none", border:"none", color:"rgba(255,255,255,0.7)", cursor:"pointer", fontSize:14 },
+  btnGhost: { background:"none", border:"1px solid rgba(255,255,255,0.3)", color:"#fff", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:13 },
+  closeBtn: { background:"#f2f4f8", border:"none", color:"#555", borderRadius:10, padding:"7px 14px", cursor:"pointer", fontSize:13, fontWeight:600 },
+  container: { padding:"20px 16px", maxWidth:480, margin:"0 auto" },
+  heroCard: { background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%)", padding:"24px 20px" },
+  card: { background:"#fff", borderRadius:16, padding:16, boxShadow:"0 2px 8px rgba(0,0,0,0.08)", cursor:"pointer", border:"1px solid #eee", marginBottom:12 },
+  secTitle: { fontWeight:700, fontSize:13, color:"#888", marginBottom:8, letterSpacing:0.5, textTransform:"uppercase" },
+  pgDark: { height:8, background:"rgba(255,255,255,0.15)", borderRadius:999, marginTop:12, overflow:"hidden" },
+  pgFill: { height:"100%", borderRadius:999, transition:"width 0.6s ease" },
+  empty: { textAlign:"center", padding:"40px 20px", background:"#fff", borderRadius:16, border:"1px dashed #ddd" },
+  fg: { marginBottom:16 },
+  label: { display:"block", fontSize:13, fontWeight:600, color:"#555", marginBottom:6 },
+  input: { width:"100%", padding:"10px 14px", borderRadius:10, border:"1px solid #dde", fontSize:15, outline:"none", background:"#fff" },
+  btnP: { background:"#0f3460", color:"#fff", border:"none", borderRadius:12, padding:"12px 20px", fontWeight:700, fontSize:15, cursor:"pointer" },
+  btnS: { background:"#f0f4ff", color:"#0f3460", border:"none", borderRadius:12, padding:"10px 16px", fontWeight:600, fontSize:14, cursor:"pointer" },
+  btnD: { background:"#ffe5e5", color:"#e74c3c", border:"none", borderRadius:8, padding:"8px 12px", fontWeight:600, cursor:"pointer" },
+  btnDs: { background:"none", color:"#bbb", border:"1px solid #eee", borderRadius:6, padding:"2px 8px", cursor:"pointer", fontSize:12 },
+  btnOk: { background:"#e8f8f0", color:"#16a085", border:"none", borderRadius:12, padding:"10px 16px", fontWeight:600, fontSize:14, cursor:"pointer" },
+  btnEdit: { background:"#fff8e1", color:"#f39c12", border:"none", borderRadius:6, padding:"2px 8px", cursor:"pointer", fontSize:12 },
+  catChip: { background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"8px 14px", textAlign:"center", minWidth:80 },
+  catBadge: { background:"#eef2ff", color:"#4460c0", borderRadius:6, padding:"2px 8px", fontSize:11, fontWeight:600 },
+  expRow: { background:"#fff", borderRadius:12, padding:"12px 14px", marginBottom:8, boxShadow:"0 1px 4px rgba(0,0,0,0.06)" },
+  overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:200 },
+  modal: { background:"#fff", borderRadius:"20px 20px 0 0", padding:"24px 20px", width:"100%", maxWidth:480, maxHeight:"90vh", overflowY:"auto" },
+  tabs: { display:"flex", gap:8, background:"#f2f4f8", borderRadius:12, padding:4, marginBottom:16 },
+  tabA: { flex:1, background:"#fff", border:"none", borderRadius:10, padding:"8px 0", fontWeight:700, fontSize:14, color:"#0f3460", cursor:"pointer", boxShadow:"0 1px 4px rgba(0,0,0,0.1)" },
+  tabI: { flex:1, background:"none", border:"none", borderRadius:10, padding:"8px 0", fontWeight:500, fontSize:14, color:"#888", cursor:"pointer" },
+  spin: { width:36, height:36, border:"3px solid #eee", borderTop:"3px solid #0f3460", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto" },
+  handle: { width:36, height:4, background:"#ddd", borderRadius:99, margin:"0 auto 16px" },
+  errBox: { background:"#ffe5e5", color:"#e74c3c", borderRadius:10, padding:"10px 14px", marginBottom:16, fontSize:13 },
+  totalBox: { background:"#f0f4ff", borderRadius:10, padding:"12px 16px", marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" },
+};
+
+// ==================== APP ====================
+function App() {
+  const [params] = useState(getParams);
+  const [view, setView] = useState("home");
+  const [events, setEvents] = useState([]);
+  const [activeEvent, setActiveEvent] = useState(null);
+  const [expenses, setExpenses] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [modal, setModal] = useState(null); // null | 'addExpense' | 'editExpense' | 'setBudget' | 'share'
+  const [editTarget, setEditTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const pollRef = useRef(null);
+
+  useEffect(() => {
+    if (params.eventId && params.mode === "member") {
+      loadSingleEvent(params.eventId);
+    } else {
+      loadEvents();
+    }
+  }, []);
+
+  async function loadSingleEvent(eid) {
+    setLoading(true);
+    try {
+      const d = await sb.get("events", "?id=eq." + eid);
+      const ev = Array.isArray(d) && d[0];
+      if (ev) { setEvents([ev]); openEvent(ev); }
+      else { setLoading(false); }
+    } catch { setLoading(false); }
+  }
+
+  async function loadEvents() {
+    setLoading(true);
+    try { const d = await sb.get("events","?order=created_at.desc"); setEvents(Array.isArray(d)?d:[]); } catch { setEvents([]); }
+    setLoading(false);
+  }
+  async function loadExpenses(eid) {
+    setSyncing(true);
+    try { const d = await sb.get("expenses",`?event_id=eq.${eid}&order=created_at.desc`); setExpenses(Array.isArray(d)?d:[]); } catch { setExpenses([]); }
+    setSyncing(false);
+  }
+  async function loadMembers(eid) {
+    try { const d = await sb.get("members",`?event_id=eq.${eid}&order=student_id.asc`); setMembers(Array.isArray(d)?d:[]); } catch { setMembers([]); }
+  }
+  function openEvent(ev) {
+    setActiveEvent(ev); setView("event");
+    loadExpenses(ev.id); loadMembers(ev.id);
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => loadExpenses(ev.id), 8000);
+  }
+  async function createEvent(name, totalBudget, categories) {
+    const id = `evt_${Date.now()}`;
+    const newEv = { id, name, total_budget:Number(totalBudget), categories:categories.map(c=>({name:c})), admin_key:`adm_${Math.random().toString(36).slice(2,8)}`, created_at:today() };
+    const result = await sb.post("events", newEv);
+    if (!Array.isArray(result)||result[0]?.code) throw new Error(result[0]?.message||JSON.stringify(result));
+    const updated = await sb.get("events","?order=created_at.desc");
+    setEvents(Array.isArray(updated)?updated:[]);
+    const created = (Array.isArray(updated)?updated:[]).find(e=>e.id===id)||newEv;
+    window.location.hash = `event=${id}&mode=admin`;
+    openEvent(created);
+  }
+  async function updateEventBudget(total, cats) {
+    await sb.patch("events", activeEvent.id, { total_budget:Number(total), categories:cats });
+    const updated = {...activeEvent, total_budget:Number(total), categories:cats};
+    setActiveEvent(updated); setEvents(prev=>prev.map(e=>e.id===activeEvent.id?updated:e));
+  }
+  async function addExpense(expense) {
+    const newExp = { id:`exp_${Date.now()}`, event_id:activeEvent.id, store:expense.store||"", purchase_datetime:expense.purchase_datetime||nowDatetime(), items:expense.items||[], amount:Number(expense.amount), category:expense.category||"その他", student_id:expense.student_id||"", student_name:expense.student_name||"" };
+    await sb.post("expenses", newExp);
+    await loadExpenses(activeEvent.id);
+  }
+  async function updateExpense(id, expense) {
+    await sb.patch("expenses", id, { store:expense.store||"", purchase_datetime:expense.purchase_datetime, items:expense.items||[], amount:Number(expense.amount), category:expense.category||"その他" });
+    await loadExpenses(activeEvent.id);
+  }
+  async function deleteExpense(expId) { await sb.del("expenses",expId); setExpenses(prev=>prev.filter(e=>e.id!==expId)); }
+  async function addMember(member) { await sb.post("members",{id:`mbr_${Date.now()}`,event_id:activeEvent.id,...member}); await loadMembers(activeEvent.id); }
+  async function deleteMember(mid) { await sb.del("members",mid); setMembers(prev=>prev.filter(m=>m.id!==mid)); }
+  async function importMembersCSV(text) {
+    const lines = text.trim().split("\n").filter(l=>l.trim());
+    const batch = lines.map(line => { const p=line.split(",").map(s=>s.trim().replace(/^"|"$/g,"")); return p.length>=2&&p[0]&&p[1]?{id:`mbr_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,event_id:activeEvent.id,student_id:p[0],name:p[1]}:null; }).filter(Boolean);
+    if (batch.length>0) { await sb.post("members",batch); await loadMembers(activeEvent.id); }
+    return batch.length;
+  }
+
+  const isAdmin = activeEvent && params.mode==="admin";
+  // 現在のユーザーの学籍番号をセッションストレージで管理
+  const currentStudentId = sessionStorage.getItem(`sid_${activeEvent?.id}`) || "";
+
+  if (loading) return <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><div style={S.spin}/><p style={{color:"#888",fontSize:14}}>読み込み中…</p></div>;
+
+  // メンバーリンクでイベントが見つからない場合
+  if (params.mode==="member" && !activeEvent && view!=="event") return (
+    <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,padding:32}}>
+      <div style={{fontSize:48}}>🔒</div>
+      <p style={{color:"#888",fontSize:14,textAlign:"center"}}>イベントが見つかりませんでした。<br/>正しいリンクを使ってアクセスしてください。</p>
+    </div>
+  );
+  if (view==="home") return <HomeScreen events={events} onCreate={()=>setView("new-event")} onOpen={ev=>{window.location.hash=`event=${ev.id}&mode=admin`;openEvent(ev);}}/>;
+  if (view==="new-event") return <NewEventScreen onBack={()=>setView("home")} onCreate={createEvent}/>;
+  if (view==="event"&&activeEvent) return <EventScreen
+    event={activeEvent} expenses={expenses} members={members} isAdmin={isAdmin}
+    syncing={syncing} currentStudentId={currentStudentId}
+    onAddExpense={async(exp)=>{ sessionStorage.setItem(`sid_${activeEvent.id}`, exp.student_id); await addExpense(exp); }}
+    onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense}
+    onUpdateBudget={updateEventBudget}
+    onAddMember={addMember} onDeleteMember={deleteMember} onImportCSV={importMembersCSV}
+    onBack={()=>{setView("home");setActiveEvent(null);window.location.hash="";if(pollRef.current)clearInterval(pollRef.current);}}
+    onShare={()=>setModal("share")}
+    modal={modal} setModal={setModal} editTarget={editTarget} setEditTarget={setEditTarget}
+  />;
+  return null;
+}
+
+// ==================== HOME ====================
+function HomeScreen({events,onCreate,onOpen}) {
+  return <div style={S.page}>
+    <div style={S.header}><span style={S.logo}>🎪 文化祭 経費帳</span><span style={{fontSize:10,color:"#6bcb77"}}>● LIVE</span></div>
+    <div style={S.container}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+        <h2 style={{...S.secTitle,fontSize:16,color:"#333"}}>イベント一覧</h2>
+        <button style={S.btnP} onClick={onCreate}>＋ 新規作成</button>
+      </div>
+      {events.length===0
+        ? <div style={S.empty}><div style={{fontSize:48,marginBottom:12}}>🎭</div><p style={{color:"#888",fontSize:14}}>「新規作成」から始めてください。</p></div>
+        : events.map(ev=><EventCard key={ev.id} ev={ev} onOpen={()=>onOpen(ev)}/>)}
+    </div>
+  </div>;
+}
+
+// ==================== EVENT CARD ====================
+function EventCard({ev, onOpen}) {
+  const [copied, setCopied] = useState(false);
+  const memberURL = buildURL(ev.id, "member");
+  function copyLink(e) {
+    e.stopPropagation();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(memberURL).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    } else {
+      // fallback
+      const el = document.createElement("textarea");
+      el.value = memberURL;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+  return <div style={S.card}>
+    <div onPointerUp={onOpen} style={{cursor:"pointer"}}>
+      <div style={{fontWeight:700,fontSize:16,color:"#1a1a2e"}}>{ev.name}</div>
+      <div style={{fontSize:12,color:"#888",marginTop:4}}>作成日 {ev.created_at} ／ 予算 ¥{(ev.total_budget||0).toLocaleString()}</div>
+    </div>
+    <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #f0f0f0",display:"flex",gap:8,alignItems:"center"}}>
+      <input style={{...S.input,flex:1,fontSize:11,color:"#888",padding:"6px 10px"}} readOnly value={memberURL}/>
+      <button style={{...(copied?S.btnOk:S.btnS),touchAction:"manipulation"}} onPointerUp={copyLink}>{copied?"✓ コピー済み":"リンクコピー"}</button>
+    </div>
+    <div style={{fontSize:11,color:"#aaa",marginTop:6}}>👆 タップでイベントを開く　／　リンクをメンバーに共有</div>
+  </div>;
+}
+
+// ==================== NEW EVENT ====================
+const DEFAULT_CATS = ["食費","交通費","備品","印刷","その他"];
+function NewEventScreen({onBack,onCreate}) {
+  const [name,setName]=useState("");
+  const [budget,setBudget]=useState("");
+  const [cats,setCats]=useState([...DEFAULT_CATS]);
+  const [newCat,setNewCat]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+
+  async function handleCreate() {
+    if (!name.trim()){setErr("イベント名を入力してください");return;}
+    if (!budget){setErr("予算を入力してください");return;}
+    setErr(""); setSaving(true);
+    try { await onCreate(name,budget,cats); }
+    catch(e) { setErr("作成失敗："+e.message); setSaving(false); }
+  }
+  return <div style={S.page}>
+    <div style={S.header}>
+      <button style={S.backBtn} onClick={onBack}>← 戻る</button>
+      <span style={S.logo}>新しいイベント</span>
+      <div style={{width:50}}/>
+    </div>
+    <div style={S.container}>
+      {err&&<div style={S.errBox}>{err}</div>}
+      <div style={S.fg}><label style={S.label}>イベント名</label><input style={S.input} value={name} onChange={e=>setName(e.target.value)} placeholder="例：文化祭2025 3年B組"/></div>
+      <div style={S.fg}><label style={S.label}>予算合計（円）</label><input style={S.input} type="number" value={budget} onChange={e=>setBudget(e.target.value)} placeholder="例：50000"/></div>
+      <div style={S.fg}>
+        <label style={S.label}>カテゴリ</label>
+        {cats.map((c,i)=><div key={i} style={{display:"flex",gap:8,marginBottom:6}}>
+          <input style={{...S.input,flex:1}} value={c} onChange={e=>{const n=[...cats];n[i]=e.target.value;setCats(n);}}/>
+          <button style={S.btnD} onClick={()=>setCats(cats.filter((_,j)=>j!==i))}>×</button>
+        </div>)}
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          <input style={{...S.input,flex:1}} value={newCat} onChange={e=>setNewCat(e.target.value)} placeholder="カテゴリを追加"/>
+          <button style={S.btnS} onClick={()=>{if(newCat.trim()){setCats([...cats,newCat.trim()]);setNewCat("");}}}>追加</button>
+        </div>
+      </div>
+      <button style={{...S.btnP,width:"100%",opacity:saving?0.5:1}} onClick={handleCreate} disabled={saving}>
+        {saving?"作成中…":"イベントを作成"}
+      </button>
+    </div>
+  </div>;
+}
+
+// ==================== EVENT SCREEN ====================
+function EventScreen({event,expenses,members,isAdmin,syncing,currentStudentId,onAddExpense,onUpdateExpense,onDeleteExpense,onUpdateBudget,onAddMember,onDeleteMember,onImportCSV,onBack,onShare,modal,setModal,editTarget,setEditTarget}) {
+  const spent = expenses.reduce((s,e)=>s+Number(e.amount),0);
+  const budget = event.total_budget||0;
+  const remaining = budget-spent;
+  const pct = budget>0?Math.min((spent/budget)*100,100):0;
+  const cats = Array.isArray(event.categories)?event.categories:[];
+  const [activeTab,setActiveTab]=useState("expenses");
+
+  function canEdit(exp) { return isAdmin || exp.student_id===currentStudentId; }
+
+  return <div style={S.page}>
+    <div style={S.header}>
+      {isAdmin
+        ? <button style={S.backBtn} onClick={onBack}>← 一覧</button>
+        : <div style={{width:50}}/>}
+      <span style={S.logo}>{event.name}</span>
+      <button style={S.btnGhost} onClick={onShare}>共有</button>
+    </div>
+    <div style={S.heroCard}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <span style={{fontSize:13,color:"rgba(255,255,255,0.7)"}}>残り予算</span>
+        <span style={{fontSize:10,color:syncing?"rgba(255,255,255,0.4)":"#6bcb77"}}>{syncing?"同期中…":"● LIVE"}</span>
+      </div>
+      <div style={{fontSize:44,fontWeight:900,letterSpacing:-2,color:remaining<0?"#ff6b6b":"#fff"}}>¥{remaining.toLocaleString()}</div>
+      <div style={S.pgDark}><div style={{...S.pgFill,width:`${pct}%`,background:pct>90?"#ff6b6b":pct>70?"#ffd93d":"#6bcb77"}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"rgba(255,255,255,0.6)",marginTop:6}}>
+        <span>使用 ¥{spent.toLocaleString()}</span><span>予算 ¥{budget.toLocaleString()}</span>
+      </div>
+    </div>
+    <div style={S.container}>
+      {cats.length>0&&<div style={{marginBottom:20}}>
+        <div style={S.secTitle}>カテゴリ別</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:8}}>
+          {cats.map((cat,i)=>{
+            const cs=expenses.filter(e=>e.category===cat.name).reduce((s,e)=>s+Number(e.amount),0);
+            return <div key={i} style={S.catChip}><div style={{fontSize:12,fontWeight:600,color:"#555"}}>{cat.name}</div><div style={{fontSize:13,fontWeight:700,color:"#1a1a2e"}}>¥{cs.toLocaleString()}</div></div>;
+          })}
+        </div>
+      </div>}
+
+      <div style={S.tabs}>
+        <button style={activeTab==="expenses"?S.tabA:S.tabI} onClick={()=>setActiveTab("expenses")}>💰 経費履歴</button>
+        {isAdmin&&<button style={activeTab==="members"?S.tabA:S.tabI} onClick={()=>setActiveTab("members")}>👥 名簿</button>}
+      </div>
+
+      {activeTab==="expenses"&&<>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <button style={{...S.btnP,flex:1}} onClick={()=>setModal("addExpense")}>＋ 経費を追加</button>
+          {isAdmin&&<button style={{...S.btnS,flex:1}} onClick={()=>setModal("setBudget")}>⚙️ 予算設定</button>}
+        </div>
+        <div style={S.secTitle}>経費履歴（{expenses.length}件）</div>
+        {expenses.length===0
+          ?<div style={S.empty}><p style={{color:"#bbb",fontSize:13}}>まだ経費がありません。</p></div>
+          :expenses.map(exp=><ExpenseRow key={exp.id} exp={exp} canEdit={canEdit(exp)}
+              onDelete={()=>onDeleteExpense(exp.id)}
+              onEdit={()=>{setEditTarget(exp);setModal("editExpense");}}
+            />)}
+      </>}
+      {activeTab==="members"&&isAdmin&&<MembersTab members={members} isAdmin={isAdmin} onAdd={onAddMember} onDelete={onDeleteMember} onImportCSV={onImportCSV}/>}
+    </div>
+
+    {modal==="addExpense"&&<ExpenseFormModal categories={cats.map(c=>c.name)} members={members} mode="add" onClose={()=>setModal(null)} onSave={async exp=>{await onAddExpense(exp);setModal(null);}}/>}
+    {modal==="editExpense"&&editTarget&&<ExpenseFormModal categories={cats.map(c=>c.name)} members={members} mode="edit" initial={editTarget} onClose={()=>{setModal(null);setEditTarget(null);}} onSave={async exp=>{await onUpdateExpense(editTarget.id,exp);setModal(null);setEditTarget(null);}}/>}
+    {modal==="setBudget"&&isAdmin&&<SetBudgetModal event={event} onClose={()=>setModal(null)} onSave={async(t,c)=>{await onUpdateBudget(t,c);setModal(null);}}/>}
+    {modal==="share"&&<ShareModal event={event} onClose={()=>setModal(null)}/>}
+  </div>;
+}
+
+// ==================== EXPENSE ROW ====================
+function ExpenseRow({exp,canEdit,onDelete,onEdit}) {
+  const [open,setOpen]=useState(false);
+  const items=Array.isArray(exp.items)?exp.items:[];
+  return <div style={S.expRow}>
+    <div onClick={()=>setOpen(v=>!v)} style={{cursor:"pointer"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={S.catBadge}>{exp.category}</span>
+            <span style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>{exp.store||"支出"}</span>
+            {exp.student_name&&<span style={{fontSize:11,color:"#888",background:"#f5f5f5",borderRadius:6,padding:"1px 7px"}}>👤 {exp.student_name}</span>}
+          </div>
+          <div style={{fontSize:11,color:"#aaa",marginTop:3}}>{(exp.purchase_datetime||"").replace("T"," ")}</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:8}}>
+          <span style={{fontWeight:800,fontSize:16,color:"#1a1a2e",whiteSpace:"nowrap"}}>¥{Number(exp.amount).toLocaleString()}</span>
+          {canEdit&&<>
+            <button style={S.btnEdit} onClick={e=>{e.stopPropagation();onEdit();}}>編集</button>
+            <button style={S.btnDs} onClick={e=>{e.stopPropagation();if(confirm("削除しますか？"))onDelete();}}>×</button>
+          </>}
+        </div>
+      </div>
+      {open&&items.length>0&&<div style={{marginTop:8,background:"#f8f9fb",borderRadius:8,padding:"8px 10px"}}>
+        {items.map((it,i)=><div key={i} style={{fontSize:12,color:"#555",display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:i<items.length-1?"1px solid #eee":"none"}}>
+          <span>{it.name} × {it.quantity}個</span>
+          <span>¥{(Number(it.unit_price)*Number(it.quantity)).toLocaleString()}</span>
+        </div>)}
+        <div style={{fontSize:12,fontWeight:700,color:"#0f3460",textAlign:"right",marginTop:6}}>合計 ¥{Number(exp.amount).toLocaleString()}</div>
+      </div>}
+      {items.length>0&&<div style={{fontSize:11,color:"#aaa",marginTop:4}}>{open?"▲ 閉じる":"▼ 品目を見る"}（{items.length}品目）</div>}
+    </div>
+  </div>;
+}
+
+// ==================== EXPENSE FORM MODAL (ADD / EDIT) ====================
+function ExpenseFormModal({categories,members,mode,initial,onClose,onSave}) {
+  const defaultItems = [{name:"",quantity:1,unit_price:""}];
+  const [sid,setSid]=useState(initial?.student_id||"");
+  const [rname,setRname]=useState(initial?.student_name||"");
+  const [store,setStore]=useState(initial?.store||"");
+  const [dt,setDt]=useState(initial?.purchase_datetime||nowDatetime());
+  const [cat,setCat]=useState(initial?.category||(categories[0]||"その他"));
+  const [items,setItems]=useState(initial?.items?.length>0?initial.items.map(it=>({...it})):defaultItems);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+
+  function lookup(v) { const m=members.find(m=>m.student_id===v); setRname(m?m.name:v?"（名簿に見つかりません）":""); }
+  function updItem(i,f,v){const n=[...items];n[i]={...n[i],[f]:v};setItems(n);}
+  const total = calcTotal(items);
+
+  async function submit() {
+    if (mode==="add"&&!sid){setErr("学籍番号を入力してください");return;}
+    const validItems = items.filter(it=>it.name&&Number(it.unit_price)>0);
+    if (validItems.length===0){setErr("品目を1つ以上入力してください");return;}
+    if (total===0){setErr("合計金額が0円です");return;}
+    setErr(""); setSaving(true);
+    const m = members.find(m=>m.student_id===sid);
+    await onSave({store,purchase_datetime:dt,category:cat,items:validItems,amount:total,student_id:sid,student_name:m?m.name:rname||sid});
+    setSaving(false);
+  }
+
+  return <div style={S.overlay} onClick={onClose}>
+    <div style={S.modal} onClick={e=>e.stopPropagation()}>
+      <div style={S.handle}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <h3 style={{margin:0,fontSize:17}}>{mode==="add"?"経費を追加":"経費を編集"}</h3>
+        <button style={S.closeBtn} onClick={onClose}>✕ 閉じる</button>
+      </div>
+      {err&&<div style={S.errBox}>{err}</div>}
+
+      {/* 学籍番号（追加時のみ） */}
+      {mode==="add"&&<div style={S.fg}>
+        <label style={S.label}>学籍番号 <span style={{color:"#e74c3c"}}>*必須</span></label>
+        <input style={S.input} value={sid} inputMode="numeric" onChange={e=>{const v=e.target.value.replace(/\D/g,"");setSid(v);lookup(v);}} placeholder="例：1001"/>
+        {sid&&<div style={{fontSize:12,marginTop:4,color:rname.includes("見つかりません")?"#e74c3c":"#16a085",fontWeight:600}}>👤 {rname||"入力中…"}</div>}
+      </div>}
+
+      {/* 日時 */}
+      <div style={S.fg}><label style={S.label}>購入日時</label><input style={S.input} type="datetime-local" value={dt} onChange={e=>setDt(e.target.value)}/></div>
+
+      {/* 店名 */}
+      <div style={S.fg}><label style={S.label}>店名</label><input style={S.input} value={store} onChange={e=>setStore(e.target.value)} placeholder="例：コンビニ"/></div>
+
+      {/* 品目 */}
+      <div style={S.fg}>
+        <label style={S.label}>購入品目 <span style={{color:"#e74c3c"}}>*必須</span></label>
+        <div style={{display:"flex",gap:4,marginBottom:4}}>
+          <span style={{flex:3,fontSize:11,color:"#aaa",textAlign:"center"}}>品名</span>
+          <span style={{flex:1,fontSize:11,color:"#aaa",textAlign:"center"}}>個数</span>
+          <span style={{flex:2,fontSize:11,color:"#aaa",textAlign:"center"}}>単価(円)</span>
+          <span style={{width:28}}/>
+        </div>
+        {items.map((item,i)=><div key={i} style={{display:"flex",gap:4,marginBottom:6,alignItems:"center"}}>
+          <input style={{...S.input,flex:3,padding:"8px 10px"}} value={item.name} onChange={e=>updItem(i,"name",e.target.value)} placeholder="品名"/>
+          <input style={{...S.input,flex:1,padding:"8px 6px",textAlign:"center"}} type="number" value={item.quantity} onChange={e=>updItem(i,"quantity",e.target.value)} min="1"/>
+          <input style={{...S.input,flex:2,padding:"8px 10px"}} type="number" value={item.unit_price} onChange={e=>updItem(i,"unit_price",e.target.value)} placeholder="0"/>
+          {items.length>1&&<button style={{...S.btnDs,width:28,padding:"0"}} onClick={()=>setItems(items.filter((_,j)=>j!==i))}>×</button>}
+        </div>)}
+        <button style={{...S.btnS,fontSize:12,padding:"6px 14px",marginTop:2}} onClick={()=>setItems([...items,{name:"",quantity:1,unit_price:""}])}>＋ 品目を追加</button>
+      </div>
+
+      {/* 合計 */}
+      <div style={S.totalBox}>
+        <span style={{fontSize:14,fontWeight:600,color:"#0f3460"}}>合計金額（自動計算）</span>
+        <span style={{fontSize:22,fontWeight:900,color:"#0f3460"}}>¥{total.toLocaleString()}</span>
+      </div>
+
+      {/* カテゴリ */}
+      <div style={S.fg}><label style={S.label}>カテゴリ</label>
+        <select style={S.input} value={cat} onChange={e=>setCat(e.target.value)}>
+          {categories.map(c=><option key={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <button style={{...S.btnP,width:"100%",opacity:saving?0.6:1}} disabled={saving} onClick={submit}>
+        {saving?(mode==="add"?"追加中…":"保存中…"):(mode==="add"?"追加する":"保存する")}
+      </button>
+    </div>
+  </div>;
+}
+
+// ==================== MEMBERS TAB ====================
+function MembersTab({members,isAdmin,onAdd,onDelete,onImportCSV}) {
+  const [form,setForm]=useState({student_id:"",name:""});
+  const [saving,setSaving]=useState(false);
+  const [importing,setImporting]=useState(false);
+  const fileRef=useRef();
+  async function handleCSV(file) {
+    setImporting(true);
+    const text=await file.text();
+    const count=await onImportCSV(text);
+    alert(`${count}件インポートしました`);
+    setImporting(false);
+  }
+  return <div>
+    <div style={{marginBottom:16}}>
+      <div style={S.secTitle}>名簿を追加</div>
+      <div style={{background:"#f7f8fa",borderRadius:12,padding:14,marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>📂 CSVから一括登録</div>
+        <div style={{fontSize:11,color:"#888",marginBottom:8}}>形式：学籍番号,氏名（1行1人）<br/>例： 1001,山田太郎</div>
+        <input type="file" accept=".csv,text/csv" ref={fileRef} style={{display:"none"}} onChange={e=>e.target.files[0]&&handleCSV(e.target.files[0])}/>
+        <button style={{...S.btnS,width:"100%"}} onClick={()=>fileRef.current.click()} disabled={importing}>{importing?"インポート中…":"CSVをアップロード"}</button>
+      </div>
+      <div style={{background:"#f7f8fa",borderRadius:12,padding:14,marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>✏️ 手動で1人追加</div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <div style={{flex:1}}><label style={S.label}>学籍番号</label><input style={S.input} value={form.student_id} onChange={e=>setForm({...form,student_id:e.target.value.replace(/\D/g,"")})} placeholder="1001" inputMode="numeric"/></div>
+          <div style={{flex:2}}><label style={S.label}>氏名</label><input style={S.input} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="山田太郎"/></div>
+        </div>
+        <button style={{...S.btnP,width:"100%",opacity:(!form.student_id||!form.name||saving)?0.5:1}} disabled={!form.student_id||!form.name||saving}
+          onClick={async()=>{setSaving(true);await onAdd(form);setForm({student_id:"",name:""});setSaving(false);}}>
+          {saving?"追加中…":"追加"}
+        </button>
+      </div>
+    </div>
+    <div style={S.secTitle}>名簿一覧（{members.length}人）</div>
+    {members.length===0?<div style={S.empty}><p style={{color:"#bbb",fontSize:13}}>名簿がまだ登録されていません。</p></div>
+    :members.map(m=><div key={m.id} style={{...S.expRow,display:"flex",alignItems:"center",cursor:"default"}}>
+      <div style={{flex:1}}>
+        <span style={{fontWeight:700,color:"#1a1a2e",fontSize:14}}>{m.name}</span>
+        <span style={{fontSize:12,color:"#aaa",marginLeft:10}}>#{m.student_id}</span>
+      </div>
+      <button style={S.btnDs} onClick={()=>{if(confirm(`${m.name}を削除しますか？`))onDelete(m.id);}}>×</button>
+    </div>)}
+  </div>;
+}
+
+// ==================== SET BUDGET MODAL ====================
+function SetBudgetModal({event,onClose,onSave}) {
+  const [total,setTotal]=useState(String(event.total_budget||0));
+  const [cats,setCats]=useState(Array.isArray(event.categories)?event.categories.map(c=>({...c})):[]);
+  const [saving,setSaving]=useState(false);
+  return <div style={S.overlay} onClick={onClose}>
+    <div style={S.modal} onClick={e=>e.stopPropagation()}>
+      <div style={S.handle}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <h3 style={{margin:0,fontSize:17}}>予算設定（管理者）</h3>
+        <button style={S.closeBtn} onClick={onClose}>✕ 閉じる</button>
+      </div>
+      <div style={S.fg}><label style={S.label}>予算合計（円）</label><input style={S.input} type="number" value={total} onChange={e=>setTotal(e.target.value)}/></div>
+      <div style={S.fg}>
+        <label style={S.label}>カテゴリ</label>
+        {cats.map((c,i)=><div key={i} style={{display:"flex",gap:8,marginBottom:6,alignItems:"center"}}>
+          <input style={{...S.input,flex:1}} value={c.name} onChange={e=>{const n=[...cats];n[i]={...n[i],name:e.target.value};setCats(n);}}/>
+          <button style={S.btnD} onClick={()=>setCats(cats.filter((_,j)=>j!==i))}>×</button>
+        </div>)}
+        <button style={{...S.btnS,marginTop:4}} onClick={()=>setCats([...cats,{name:"新カテゴリ"}])}>＋ 追加</button>
+      </div>
+      <button style={{...S.btnP,width:"100%",opacity:saving?0.6:1}} disabled={saving}
+        onClick={async()=>{setSaving(true);await onSave(Number(total),cats);setSaving(false);}}>
+        {saving?"保存中…":"保存する"}
+      </button>
+    </div>
+  </div>;
+}
+
+// ==================== SHARE MODAL ====================
+function ShareModal({event,onClose}) {
+  const adminURL=buildURL(event.id,"admin");
+  const memberURL=buildURL(event.id,"member");
+  const [copied,setCopied]=useState(null);
+  function copy(url,type){navigator.clipboard.writeText(url).then(()=>{setCopied(type);setTimeout(()=>setCopied(null),2000);});}
+  return <div style={S.overlay} onClick={onClose}>
+    <div style={S.modal} onClick={e=>e.stopPropagation()}>
+      <div style={S.handle}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <h3 style={{margin:0,fontSize:17}}>共有リンク</h3>
+        <button style={S.closeBtn} onClick={onClose}>✕ 閉じる</button>
+      </div>
+      {[{label:"👑 管理者リンク",desc:"予算設定・名簿管理・全件編集削除が可能",url:adminURL,type:"admin"},{label:"✏️ メンバーリンク",desc:"経費追加・自分の経費の編集削除が可能",url:memberURL,type:"member"}].map(({label,desc,url,type})=>
+        <div key={type} style={{background:"#f7f8fa",borderRadius:12,padding:14,marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{label}</div>
+          <div style={{fontSize:12,color:"#888",marginBottom:8}}>{desc}</div>
+          <div style={{display:"flex",gap:8}}>
+            <input style={{...S.input,flex:1,fontSize:11,color:"#555"}} readOnly value={url}/>
+            <button style={copied===type?S.btnOk:S.btnS} onClick={()=>copy(url,type)}>{copied===type?"✓ コピー済み":"コピー"}</button>
+          </div>
+        </div>)}
+      <div style={{background:"#edfbf3",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#16a085"}}>
+        ✓ Supabaseでリアルタイム同期中。どのデバイスでも同じデータが見られます。
+      </div>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
