@@ -154,7 +154,7 @@ function App() {
   }
   async function loadExpenses(eid) {
     setSyncing(true);
-    try { const d = await sb.get("expenses",`?event_id=eq.${eid}&order=created_at.desc`); setExpenses(Array.isArray(d)?d:[]); } catch { setExpenses([]); }
+    try { const d = await sb.get("expenses",`?event_id=eq.${eid}&order=created_at.asc`); setExpenses(Array.isArray(d)?d:[]); } catch { setExpenses([]); }
     setSyncing(false);
   }
   async function loadMembers(eid) {
