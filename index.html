@@ -416,12 +416,12 @@ function ExpenseRow({exp,canEdit,onDelete,onEdit}) {
           </div>
           <div style={{fontSize:11,color:"#aaa",marginTop:3}}>{(exp.purchase_datetime||"").replace("T"," ")}</div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:8}}>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,marginLeft:8}}>
           <span style={{fontWeight:800,fontSize:16,color:"#1a1a2e",whiteSpace:"nowrap"}}>¥{Number(exp.amount).toLocaleString()}</span>
-          {canEdit&&<>
+          {canEdit&&<div style={{display:"flex",gap:4}}>
             <button style={S.btnEdit} onClick={e=>{e.stopPropagation();onEdit();}}>編集</button>
             <button style={S.btnDs} onClick={e=>{e.stopPropagation();if(confirm("削除しますか？"))onDelete();}}>×</button>
-          </>}
+          </div>}
         </div>
       </div>
       {open&&items.length>0&&<div style={{marginTop:8,background:"#f8f9fb",borderRadius:8,padding:"8px 10px"}}>
